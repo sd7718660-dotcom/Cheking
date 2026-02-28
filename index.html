@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trending Store - Admin Panel</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#00c853',
+                        secondary: '#ffd600',
+                        danger: '#ff3d00',
+                        gold: '#ffd700',
+                        bgDeep: '#0b0e11',
+                        surface: '#151a21',
+                        surfaceLight: '#1e2329',
+                        border: '#2b3139',
+                        textGray: '#848e9c',
+                        trade: '#00c853',
+                        tradeRed: '#ff3d00'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: #0b0e11; color: #eaecef; font-family: 'Inter', sans-serif; overflow-x: hidden; font-size: 14px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0b0e11; }
+        ::-webkit-scrollbar-thumb { background: #2b3139; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #00c853; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        .glass { background: rgba(21, 26, 33, 0.95); backdrop-filter: blur(20px); border: 1px solid #2b3139; }
+        
+        .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 260px; background: #151a21; border-right: 1px solid #2b3139; z-index: 1000; overflow-y: auto; transition: transform 0.3s; }
+        .sidebar-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin: 4px 8px; border-radius: 8px; cursor: pointer; transition: all 0.2s; color: #848e9c; }
+        .sidebar-item:hover { background: #1e2329; color: #fff; }
+        .sidebar-item.active { background: #00c853; color: #000; font-weight: 600; }
+        
+        .main-content { margin-left: 260px; min-height: 100vh; transition: margin-left 0.3s; }
+        
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { text-align: left; padding: 12px; font-size: 12px; color: #848e9c; font-weight: 600; text-transform: uppercase; border-bottom: 1px solid #2b3139; background: #0b0e11; }
+        .data-table td { padding: 12px; border-bottom: 1px solid #2b3139; font-size: 13px; }
+        
+        .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .status-pending { background: #ffd600; color: #000; }
+        .status-approved { background: #00c853; color: #000; }
+        .status-rejected { background: #ff3d00; color: #fff; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(5px); }
+        .modal-box { background: #151a21; border: 1px solid #2b3139; border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
+        
+        .form-input { width: 100%; background: #0b0e11; border: 1px solid #2b3139; color: #eaecef; padding: 10px 12px; border-radius: 8px; }
+        .hidden { display: none !important; }
+
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; margin-top: 60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="min-h-screen flex items-center justify-center p-6">
+        <div class="glass p-8 rounded-2xl w-full max-width-[400px] animate-fade-in shadow-2xl border-primary/20">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-primary rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-user-shield text-black text-3xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold">Admin Portal</h2>
+                <p class="text-textGray text-sm">Please sign in to continue</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-textGray mb-1 uppercase tracking-wider">Email</label>
+                    <input type="email" id="login-email" class="form-input" placeholder="admin@trending.com">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-textGray mb-1 uppercase tracking-wider">Password</label>
+                    <input type="password" id="login-password" class="form-input" placeholder="••••••••">
+                </div>
+                <button onclick="loginAdmin()" id="login-btn" class="w-full bg-primary text-black font-bold py-3 rounded-lg hover:opacity-90 transition-all">
+                    Login Now
+                </button>
+            </div>
+            <p id="login-msg" class="text-danger text-center mt-4 text-xs font-semibold"></p>
+        </div>
+    </div>
+
+    <div id="admin-panel" class="hidden">
+        <div class="mobile-header fixed top-0 left-0 right-0 h-[60px] bg-surface border-b border-border z-[999] flex items-center justify-between px-4 lg:hidden">
+            <div class="flex items-center gap-3">
+                <button class="w-10 h-10 bg-surfaceLight rounded-lg flex items-center justify-center" onclick="toggleSidebar()">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <span class="font-bold text-lg">Admin Panel</span>
+            </div>
+            <button onclick="logout()" class="text-danger"><i class="fas fa-power-off"></i></button>
+        </div>
+
+        <div class="overlay fixed inset-0 bg-black/50 z-[999] hidden" id="overlay" onclick="toggleSidebar()"></div>
+
+        <div class="sidebar" id="sidebar">
+            <div class="p-4 border-b border-border mb-4">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                        <i class="fas fa-shield-alt text-black text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg leading-tight">Trending Store</h1>
+                        <p class="text-xs text-textGray">Admin Control</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav>
+                <div class="sidebar-item active" onclick="switchSection('dashboard')">
+                    <i class="fas fa-home"></i><span>Dashboard</span>
+                </div>
+                <div class="px-4 py-2 text-xs font-bold text-textGray uppercase mt-4 mb-2">User Management</div>
+                <div class="sidebar-item" onclick="switchSection('users')">
+                    <i class="fas fa-users"></i><span>All Users</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('kyc')">
+                    <i class="fas fa-id-card"></i><span>KYC Verification</span>
+                </div>
+                <div class="px-4 py-2 text-xs font-bold text-textGray uppercase mt-4 mb-2">Financial</div>
+                <div class="sidebar-item" onclick="switchSection('deposits')">
+                    <i class="fas fa-arrow-down"></i><span>Deposits</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('withdrawals')">
+                    <i class="fas fa-arrow-up"></i><span>Withdrawals</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('transfers')">
+                    <i class="fas fa-exchange-alt"></i><span>Internal Transfers</span>
+                </div>
+                <div class="px-4 py-2 text-xs font-bold text-textGray uppercase mt-4 mb-2">Products</div>
+                <div class="sidebar-item" onclick="switchSection('nfts')">
+                    <i class="fas fa-image"></i><span>NFT Management</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('investments')">
+                    <i class="fas fa-chart-pie"></i><span>Investment Plans</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('trading')">
+                    <i class="fas fa-chart-line"></i><span>Trading Config</span>
+                </div>
+                <div class="px-4 py-2 text-xs font-bold text-textGray uppercase mt-4 mb-2">System</div>
+                <div class="sidebar-item" onclick="switchSection('reports')">
+                    <i class="fas fa-chart-bar"></i><span>Reports & Analytics</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('settings')">
+                    <i class="fas fa-cog"></i><span>Settings</span>
+                </div>
+                <div class="sidebar-item" onclick="switchSection('notifications')">
+                    <i class="fas fa-bell"></i><span>Notifications</span>
+                </div>
+                <div class="sidebar-item mt-8 text-danger" onclick="logout()">
+                    <i class="fas fa-power-off"></i><span>Logout</span>
+                </div>
+            </nav>
+        </div>
+
+        <div class="main-content p-6">
+            
+            <div id="section-dashboard" class="section-content animate-fade-in">
+                <div class="flex items-center gap-3 text-2xl font-bold mb-6">
+                    <i class="fas fa-home text-primary"></i> Dashboard Overview
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-surface p-6 rounded-xl border border-border">
+                        <p class="text-textGray text-xs font-bold uppercase mb-2">Total Users</p>
+                        <h3 class="text-3xl font-bold" id="stat-total-users">0</h3>
+                    </div>
+                    <div class="bg-surface p-6 rounded-xl border border-border">
+                        <p class="text-textGray text-xs font-bold uppercase mb-2 text-secondary">Pending Deposits</p>
+                        <h3 class="text-3xl font-bold" id="stat-pending-deposits">₹0</h3>
+                        <p id="stat-pending-count" class="text-xs text-textGray mt-1">0 requests</p>
+                    </div>
+                    <div class="bg-surface p-6 rounded-xl border border-border">
+                        <p class="text-textGray text-xs font-bold uppercase mb-2 text-danger">Pending Withdrawals</p>
+                        <h3 class="text-3xl font-bold" id="stat-pending-withdrawals">₹0</h3>
+                        <p id="stat-withdraw-count" class="text-xs text-textGray mt-1">0 requests</p>
+                    </div>
+                    <div class="bg-surface p-6 rounded-xl border border-border">
+                        <p class="text-textGray text-xs font-bold uppercase mb-2 text-primary">KYC Pending</p>
+                        <h3 class="text-3xl font-bold" id="stat-pending-kyc">0</h3>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-bold mb-4 flex items-center gap-2"><i class="fas fa-bolt text-secondary"></i> Quick Actions</h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="switchSection('deposits')" class="bg-surfaceLight hover:bg-primary hover:text-black p-4 rounded-lg text-left transition-all">
+                                <i class="fas fa-check-circle mb-2 block text-xl"></i><span class="font-semibold text-sm">Deposits</span>
+                            </button>
+                            <button onclick="switchSection('withdrawals')" class="bg-surfaceLight hover:bg-danger hover:text-white p-4 rounded-lg text-left transition-all">
+                                <i class="fas fa-money-bill-wave mb-2 block text-xl"></i><span class="font-semibold text-sm">Withdrawals</span>
+                            </button>
+                            <button onclick="openModal('add-nft-modal')" class="bg-surfaceLight hover:bg-purple-500 hover:text-white p-4 rounded-lg text-left transition-all">
+                                <i class="fas fa-plus mb-2 block text-xl"></i><span class="font-semibold text-sm">Add NFT</span>
+                            </button>
+                            <button onclick="openModal('broadcast-modal')" class="bg-surfaceLight hover:bg-secondary hover:text-black p-4 rounded-lg text-left transition-all">
+                                <i class="fas fa-bullhorn mb-2 block text-xl"></i><span class="font-semibold text-sm">Broadcast</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="glass p-6 rounded-xl">
+                        <h3 class="font-bold mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-primary"></i> Recent Activity</h3>
+                        <div id="recent-activity" class="space-y-3">
+                            <div class="text-textGray text-center py-4">Waiting for data...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="section-users" class="section-content hidden animate-fade-in">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="text-2xl font-bold flex items-center gap-3"><i class="fas fa-users text-primary"></i> All Users</div>
+                    <input type="text" id="user-search" placeholder="Search email/name..." class="bg-surface border border-border px-4 py-2 rounded-lg text-sm" oninput="searchUsers()">
+                </div>
+                <div class="glass rounded-xl overflow-hidden">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>User</th><th>Contact</th><th>Balance</th><th>KYC</th><th>Joined</th><th>Action</th></tr>
+                        </thead>
+                        <tbody id="users-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="section-kyc" class="section-content hidden animate-fade-in">
+                <div class="text-2xl font-bold mb-6">KYC Requests</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="kyc-list"></div>
+            </div>
+
+            <div id="section-deposits" class="section-content hidden animate-fade-in">
+                <div class="text-2xl font-bold mb-6">Deposit Logs</div>
+                <div class="glass rounded-xl overflow-hidden">
+                    <table class="data-table">
+                        <thead><tr><th>Date</th><th>User</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                        <tbody id="deposits-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="section-withdrawals" class="section-content hidden"></div>
+            <div id="section-nfts" class="section-content hidden"></div>
+            <div id="section-trading" class="section-content hidden"></div>
+            <div id="section-settings" class="section-content hidden"></div>
+
+        </div>
+    </div>
+
+    <div id="add-nft-modal" class="modal-overlay">
+        <div class="modal-box p-6">
+            <h3 class="text-xl font-bold mb-4">Add NFT</h3>
+            <div class="space-y-3">
+                <input type="text" id="nft-name" class="form-input" placeholder="NFT Name">
+                <input type="number" id="nft-price" class="form-input" placeholder="Price ₹">
+                <input type="file" id="nft-image-file" class="bg-surface w-full p-2 rounded" accept="image/*" onchange="handleImageUpload(this, 'nft-image-url')">
+                <input type="hidden" id="nft-image-url">
+                <button onclick="saveNewNFT()" class="w-full bg-primary text-black py-2 rounded font-bold">Save NFT</button>
+                <button onclick="closeModal('add-nft-modal')" class="w-full text-textGray py-2">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-5 right-5 bg-primary text-black px-6 py-3 rounded-lg font-bold transition-all translate-x-[200%] z-[10000]"></div>
+
+    <script>
+        // FIREBASE CONFIG (Directly used to avoid Base64 issues)
+        const firebaseConfig = {
+            apiKey: "AIzaSyClHCeyqGiWulin0YaxgTeNthmSXRb0uSQ",
+            authDomain: "trending-store-1234.firebaseapp.com",
+            projectId: "trending-store-1234",
+            storageBucket: "trending-store-1234.firebasestorage.app",
+            messagingSenderId: "872833621332",
+            appId: "1:872833621332:web:68c505a2f2ff9e5bc83cc1"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        // 1. LOGIN LOGIC
+        async function loginAdmin() {
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-password').value;
+            const btn = document.getElementById('login-btn');
+            const msg = document.getElementById('login-msg');
+
+            if(!email || !pass) return;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking Access...';
+            btn.disabled = true;
+
+            try {
+                await auth.signInWithEmailAndPassword(email, pass);
+                // Auth listener will handle the UI switch
+            } catch (e) {
+                msg.innerText = "Invalid credentials or access denied.";
+                btn.innerHTML = 'Login Now';
+                btn.disabled = false;
+            }
+        }
+
+        // 2. AUTH STATE LISTENER (The real fix for 404)
+        auth.onAuthStateChanged(user => {
+            const loginUI = document.getElementById('login-screen');
+            const adminUI = document.getElementById('admin-panel');
+
+            if (user) {
+                // Pehle check karo admin hai ya nahi
+                db.collection('admin').doc('admins').get().then(doc => {
+                    if (doc.exists && doc.data().uids.includes(user.uid)) {
+                        loginUI.classList.add('hidden');
+                        adminUI.classList.remove('hidden');
+                        setupRealtimeListeners();
+                    } else {
+                        alert("Not an Admin account!");
+                        auth.signOut();
+                    }
+                });
+            } else {
+                loginUI.classList.remove('hidden');
+                adminUI.classList.add('hidden');
+            }
+        });
+
+        // 3. UI LOGIC (Your original functions)
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('hidden');
+        }
+
+        function switchSection(section) {
+            document.querySelectorAll('.section-content').forEach(s => s.classList.add('hidden'));
+            document.getElementById('section-' + section).classList.remove('hidden');
+            
+            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            
+            if(window.innerWidth < 1024) toggleSidebar();
+        }
+
+        // 4. REALTIME DATA (Your original logic)
+        function setupRealtimeListeners() {
+            // Stats
+            db.collection('users').onSnapshot(snap => {
+                document.getElementById('stat-total-users').innerText = snap.size;
+                renderUsers(snap);
+            });
+
+            db.collection('payments').where('status','==','pending').onSnapshot(snap => {
+                let total = 0;
+                snap.forEach(d => total += (d.data().amount || 0));
+                document.getElementById('stat-pending-deposits').innerText = '₹' + total;
+                document.getElementById('stat-pending-count').innerText = snap.size + ' requests';
+                renderDeposits(snap);
+            });
+
+            db.collection('kyc').where('status','==','pending').onSnapshot(snap => {
+                document.getElementById('stat-pending-kyc').innerText = snap.size;
+                renderKYC(snap);
+            });
+        }
+
+        function renderUsers(snap) {
+            const tbody = document.getElementById('users-table-body');
+            tbody.innerHTML = '';
+            snap.forEach(doc => {
+                const u = doc.data();
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="font-bold">${u.name || 'User'}</td>
+                        <td class="text-textGray">${u.email}</td>
+                        <td class="text-primary font-bold">₹${u.spotBalance || 0}</td>
+                        <td><span class="status-badge status-${u.kycStatus || 'pending'}">${u.kycStatus || 'None'}</span></td>
+                        <td class="text-xs text-textGray">${u.createdAt?.toDate().toLocaleDateString()}</td>
+                        <td><button class="bg-surfaceLight p-2 rounded" onclick="viewUser('${doc.id}')"><i class="fas fa-eye"></i></button></td>
+                    </tr>`;
+            });
+        }
+
+        function renderDeposits(snap) {
+            const tbody = document.getElementById('deposits-table-body');
+            tbody.innerHTML = '';
+            snap.forEach(doc => {
+                const d = doc.data();
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="text-xs">${d.timestamp?.toDate().toLocaleDateString()}</td>
+                        <td>${d.userName}</td>
+                        <td class="font-bold">₹${d.amount}</td>
+                        <td><span class="status-badge status-pending">Pending</span></td>
+                        <td>
+                            <button class="text-primary mr-2" onclick="approveDeposit('${doc.id}', '${d.uid}', ${d.amount})">Approve</button>
+                            <button class="text-danger" onclick="rejectDeposit('${doc.id}')">Reject</button>
+                        </td>
+                    </tr>`;
+            });
+        }
+
+        function renderKYC(snap) {
+            const list = document.getElementById('kyc-list');
+            list.innerHTML = '';
+            snap.forEach(doc => {
+                const k = doc.data();
+                list.innerHTML += `
+                    <div class="glass p-4 rounded-xl">
+                        <img src="${k.documentUrl}" class="w-full h-32 object-cover rounded mb-3">
+                        <h4 class="font-bold">${k.userName}</h4>
+                        <p class="text-xs text-textGray mb-3">${k.documentType}: ${k.documentNumber}</p>
+                        <div class="flex gap-2">
+                            <button class="bg-primary text-black flex-1 py-1 rounded text-xs font-bold" onclick="approveKYC('${doc.id}', '${k.uid}')">Approve</button>
+                            <button class="bg-danger text-white flex-1 py-1 rounded text-xs font-bold" onclick="rejectKYC('${doc.id}')">Reject</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        // Actions
+        async function approveDeposit(id, uid, amt) {
+            await db.collection('payments').doc(id).update({status: 'approved'});
+            await db.collection('users').doc(uid).update({spotBalance: firebase.firestore.FieldValue.increment(amt)});
+            showToast("Deposit Approved!");
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.transform = 'translateX(0)';
+            setTimeout(() => t.style.transform = 'translateX(200%)', 3000);
+        }
+
+        function logout() {
+            auth.signOut();
+        }
+
+        function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    </script>
+</body>
+                      </html>
